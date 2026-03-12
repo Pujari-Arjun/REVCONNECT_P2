@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>REVConnect — Chen ER Diagram</title>
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;600&family=DM+Sans:wght@500;700;900&display=swap" rel="stylesheet">
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+body{background:#ffffff;font-family:'DM Sans',sans-serif;overflow:hidden;height:100vh;width:100vw;user-select:none}
+#bar{
+  position:fixed;top:0;left:0;right:0;z-index:300;
+  height:50px;background:rgba(255,255,255,.97);
+  border-bottom:1px solid #e2e8f0;
+  display:flex;align-items:center;gap:10px;padding:0 20px;
+  backdrop-filter:blur(8px);
+}
+.bar-title{font-size:.85rem;font-weight:700;color:#1e293b;letter-spacing:.02em}
+.bar-title span{color:#5b9cf6}
+.bsep{width:1px;height:22px;background:#e2e8f0;flex-shrink:0}
+.btn{
+  background:#f8fafc;border:1px solid #cbd5e1;color:#475569;
+  font-size:.68rem;font-family:'Fira Code',monospace;
+  padding:5px 12px;border-radius:6px;cursor:pointer;transition:.12s;
+}
+.btn:hover{background:#e2e8f0;color:#1e293b;border-color:#5b9cf6}
+#zlbl{font-family:'Fira Code',monospace;font-size:.68rem;color:#64748b;min-width:38px;text-align:center}
+.legend{margin-left:auto;display:flex;align-items:center;gap:18px;font-size:.65rem;color:#64748b;font-family:'Fira Code',monospace}
+.leg{display:flex;align-items:center;gap:6px}
+.l-rect{width:22px;height:13px;border:2px solid #5b9cf6;border-radius:2px;background:none}
+.l-oval{width:22px;height:13px;border:2px solid #a78bfa;border-radius:50%;background:none}
+.l-oval.pk{border-style:double;border-width:3px}
+.l-dia{width:14px;height:14px;border:2px solid #34d399;transform:rotate(45deg);background:none;flex-shrink:0}
+.l-line{width:22px;height:0;border-top:1.5px solid #6b7280}
+#wrap{position:fixed;inset:50px 0 0 0;overflow:hidden;cursor:grab}
+#wrap.g{cursor:grabbing}
+svg{width:100%;height:100%;background:#ffffff}
+
+/* Chen element styles */
+.e-rect{fill:#eff6ff;stroke-width:2.5;rx:4}
+.e-name{font-family:'DM Sans',sans-serif;font-weight:700;text-anchor:middle;dominant-baseline:middle}
+.e-oval{fill:#faf5ff;stroke-width:1.8}
+.e-oval-pk{fill:#faf5ff;stroke-width:2.5}
+.e-aname{font-family:'Fira Code',monospace;text-anchor:middle;dominant-baseline:middle}
+.e-diamond{fill:#f0fdf4;stroke-width:2}
+.e-rname{font-family:'DM Sans',sans-serif;font-weight:700;text-anchor:middle;dominant-baseline:middle}
+.conn-line{fill:none;stroke-width:1.5}
+.card-label{font-family:'Fira Code',monospace;font-weight:600;text-anchor:middle;dominant-baseline:middle}
+</style>
+</head>
+<body>
+
+<div id="bar">
+  <span class="bar-title"><span>REVConnect</span> · Chen ER Diagram</span>
+  <div class="bsep"></div>
+  <button class="btn" onclick="zoomAt(1.2)">＋</button>
+  <span id="zlbl">45%</span>
+  <button class="btn" onclick="zoomAt(.83)">－</button>
+  <button class="btn" onclick="resetView()">⊙ Reset</button>
+  <div class="bsep"></div>
+  <div class="legend">
+    <div class="leg"><div class="l-rect"></div>Entity</div>
+    <div class="leg"><div class="l-oval pk"></div>PK Attribute</div>
+    <div class="leg"><div class="l-oval"></div>Attribute</div>
+    <div class="leg"><div class="l-dia"></div>Relationship</div>
+    <div class="leg"><div class="l-line"></div>Connection</div>
+    <div style="color:#94a3b8">·</div>
+    <span>Drag · Scroll to zoom</span>
+  </div>
+</div>
+
+<div id="wrap">
+<svg id="svg" xmlns="http://www.w3.org/2000/svg">
+<g id="vp">
+  <g id="conn-layer"></g>
+  <g id="shape-layer"></g>
+  <g id="label-layer"></g>
+</g>
+</svg>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════════════════════
+//  CHEN NOTATION ER DIAGRAM
+//
+//  Shapes:
+//    ENTITY   → Rectangle
+//    ATTR     → Oval  (pk=true → double-border underline)
+//    REL      → Diamond
+//
+//  Everything is positioned manually so the diagram reads clearly.
+// ══════════════════════════════════════════════════════════════════════
+
+const NS = 'http://www.w3.org/2000/svg';
+function el(tag,a={}){
+  const e=document.createElementNS(NS,tag);
+  for(const[k,v]of Object.entries(a))e.setAttribute(k,v);
+  return e;
+}
+function txt(str,x,y,size,color,weight,cls=''){
+  const t=el('text',{x,y,'font-size':size,fill:color,'font-weight':weight||400,class:cls});
+  t.textContent=str;return t;
+}
+
+// ── Colour palette ─────────────────────────────────────────────────────
+const C = {
+  // entity border colours per domain
+  user:    '#5b9cf6',
+  profile: '#34d399',
+  content: '#5b9cf6',
+  social:  '#fb923c',
+  inter:   '#f472b6',
+  notif:   '#fbbf24',
+  analyt:  '#38bdf8',
+  biz:     '#a78bfa',
+
+  attr:    '#a78bfa',   // oval stroke
+  attrTxt: '#6d28d9',
+  pkStroke:'#fde68a',   // PK oval (double)
+  pkTxt:   '#fde68a',
+  relFill: '#f0fdf4',
+  relStroke:'#34d399',
+  relTxt:  '#6ee7b7',
+  line:    '#94a3b8',
+  cardTxt: '#475569',
+  entTxt:  '#0f172a',
+  entBg:   '#f0f7ff',
+  bg:      '#ffffff',
+};
+
+// ══════════════════════════════════════════════════════════════════════
+//  SHAPES REGISTRY
+//  Each node: { id, type:'entity'|'attr'|'rel', x, y, ...dims, label, pk? }
+// ══════════════════════════════════════════════════════════════════════
+const EW=140, EH=44;   // entity rect
+const AW=88,  AH=30;   // attribute oval
+const DW=110, DH=46;   // diamond (half-width, half-height used)
+
+const nodes = [];
+const edges = []; // {from, to, card?}  card = '1'|'N'|'M' shown near 'to'
+
+function ent(id,label,x,y,color){
+  nodes.push({id,type:'entity',label,x,y,w:EW,h:EH,color:color||C.user});
+}
+function attr(id,label,x,y,pk=false,color){
+  nodes.push({id,type:'attr',label,x,y,w:AW,h:AH,pk,color:color||C.attr});
+}
+function rel(id,label,x,y,color){
+  nodes.push({id,type:'rel',label,x,y,w:DW,h:DH,color:color||C.relStroke});
+}
+function edge(from,to,card=''){
+  edges.push({from,to,card});
+}
+
+// ══════════════════════════════════════════════════════════════════════
+//  LAYOUT
+//  Zones drawn left→right, top→bottom:
+//    Col 0 (x~120):   Left profiles
+//    Col 1 (x~400):   USER entity + its attributes top
+//    Col 2 (x~700):   USER→content relationships + POST
+//    Col 3 (x~1000):  POST interactions
+//    Col 4 (x~1300):  Interaction entities + Social
+//    Col 5 (x~1600):  Analytics + Notification
+// ══════════════════════════════════════════════════════════════════════
+
+// ── ①  USER ──────────────────────────────────────────────────────────
+ent('USER',      'USER',       520, 460, C.user);
+attr('u_id',     'user_id',    300, 320, true);
+attr('u_name',   'user_name',  430, 300);
+attr('u_email',  'email',      570, 290);
+attr('u_pass',   'password',   700, 310);
+attr('u_role',   'role',       790, 340);
+attr('u_type',   'account_type',760,420);
+attr('u_priv',   'is_private', 730, 490);
+attr('u_cat',    'category',   730, 560);
+attr('u_created','created_at', 580, 560);
+
+edge('USER','u_id');
+edge('USER','u_name');
+edge('USER','u_email');
+edge('USER','u_pass');
+edge('USER','u_role');
+edge('USER','u_type');
+edge('USER','u_priv');
+edge('USER','u_cat');
+edge('USER','u_created');
+
+// ── ②  PROFILE ────────────────────────────────────────────────────────
+ent('PROFILE',     'PROFILE',      120, 200, C.profile);
+attr('p_id',       'profile_id',    50, 100, true, C.profile);
+attr('p_name',     'name',         200, 100, false,C.profile);
+attr('p_bio',      'bio',          280, 140, false,C.profile);
+attr('p_pic',      'profile_pic',  280, 200, false,C.profile);
+attr('p_web',      'website_link', 280, 260, false,C.profile);
+attr('p_loc',      'location',     180, 290, false,C.profile);
+
+edge('PROFILE','p_id');
+edge('PROFILE','p_name');
+edge('PROFILE','p_bio');
+edge('PROFILE','p_pic');
+edge('PROFILE','p_web');
+edge('PROFILE','p_loc');
+
+rel('HAS_PROFILE','has',320,400,C.profile);
+edge('USER','HAS_PROFILE','1');
+edge('HAS_PROFILE','PROFILE','1');
+
+// ── ③  BUSINESS PROFILE ───────────────────────────────────────────────
+ent('BIZ_PROFILE', 'BUSINESS_PROFILE', 120, 620, C.biz);
+attr('bp_id',      'business_id',       40, 550, true, C.biz);
+attr('bp_bname',   'business_name',     40, 610, false,C.biz);
+attr('bp_dbio',    'detailed_bio',      40, 670, false,C.biz);
+attr('bp_cat',     'category',          40, 730, false,C.biz);
+attr('bp_addr',    'business_address', 150, 760, false,C.biz);
+attr('bp_hrs',     'business_hours',   260, 760, false,C.biz);
+attr('bp_cont',    'contact_info',     310, 700, false,C.biz);
+
+edge('BIZ_PROFILE','bp_id');
+edge('BIZ_PROFILE','bp_bname');
+edge('BIZ_PROFILE','bp_dbio');
+edge('BIZ_PROFILE','bp_cat');
+edge('BIZ_PROFILE','bp_addr');
+edge('BIZ_PROFILE','bp_hrs');
+edge('BIZ_PROFILE','bp_cont');
+
+rel('HAS_BIZ','has',320,620,C.biz);
+edge('USER','HAS_BIZ','1');
+edge('HAS_BIZ','BIZ_PROFILE','1');
+
+// ── ④  CREATOR PROFILE ────────────────────────────────────────────────
+ent('CR_PROFILE',  'CREATOR_PROFILE',  120,1000, C.attr);
+attr('cp_id',      'creator_id',        40, 940, true, C.attr);
+attr('cp_cname',   'creator_name',      40,1000, false,C.attr);
+attr('cp_dbio',    'detailed_bio',      40,1060, false,C.attr);
+attr('cp_slinks',  'social_links',     155,1100, false,C.attr);
+
+edge('CR_PROFILE','cp_id');
+edge('CR_PROFILE','cp_cname');
+edge('CR_PROFILE','cp_dbio');
+edge('CR_PROFILE','cp_slinks');
+
+rel('HAS_CR','has',320,830,C.attr);
+edge('USER','HAS_CR','1');
+edge('HAS_CR','CR_PROFILE','1');
+
+// ── ⑤  NOTIFICATION PREFERENCE ────────────────────────────────────────
+ent('NOTIF_PREF',  'NOTIF_PREFERENCE', 120,1280, C.notif);
+attr('np_id',      'id',               40,1220, true, C.notif);
+attr('np_like',    'like_notif',       40,1270, false,C.notif);
+attr('np_cmt',     'comment_notif',    40,1330, false,C.notif);
+attr('np_follow',  'follow_notif',     40,1390, false,C.notif);
+attr('np_share',   'share_notif',     155,1410, false,C.notif);
+
+edge('NOTIF_PREF','np_id');
+edge('NOTIF_PREF','np_like');
+edge('NOTIF_PREF','np_cmt');
+edge('NOTIF_PREF','np_follow');
+edge('NOTIF_PREF','np_share');
+
+rel('HAS_PREF','has',320,1100,C.notif);
+edge('USER','HAS_PREF','1');
+edge('HAS_PREF','NOTIF_PREF','1');
+
+// ── ⑥  POST ───────────────────────────────────────────────────────────
+ent('POST',       'POST',       880, 460, C.content);
+attr('po_id',     'post_id',    790, 300, true);
+attr('po_cont',   'content',    900, 290);
+attr('po_hash',   'hashtag',   1010, 310);
+attr('po_img',    'image_url', 1060, 380);
+attr('po_pin',    'is_pinned', 1060, 460);
+attr('po_views',  'view_count',1060, 530);
+attr('po_cta',    'cta_label', 1060, 600);
+attr('po_sched',  'scheduled_at',940,590);
+attr('po_create', 'created_at', 820,570);
+
+edge('POST','po_id');
+edge('POST','po_cont');
+edge('POST','po_hash');
+edge('POST','po_img');
+edge('POST','po_pin');
+edge('POST','po_views');
+edge('POST','po_cta');
+edge('POST','po_sched');
+edge('POST','po_create');
+
+rel('CREATES',    'creates',   700, 460, C.content);
+edge('USER','CREATES','1');
+edge('CREATES','POST','N');
+
+// ── ⑦  PRODUCT ────────────────────────────────────────────────────────
+ent('PRODUCT',    'PRODUCT',    880, 900, C.biz);
+attr('pr_id',     'product_id', 790, 820, true, C.biz);
+attr('pr_name',   'product_name',880,810, false,C.biz);
+attr('pr_desc',   'description',970,840, false,C.biz);
+attr('pr_price',  'price',      970,900, false,C.biz);
+
+edge('PRODUCT','pr_id');
+edge('PRODUCT','pr_name');
+edge('PRODUCT','pr_desc');
+edge('PRODUCT','pr_price');
+
+rel('TAGS',       'tags',       880, 700, C.biz);
+edge('POST','TAGS','1');
+edge('TAGS','PRODUCT','N');
+
+// ── ⑧  BUSINESS PRODUCT ──────────────────────────────────────────────
+ent('BIZ_PROD',   'BUSINESS_PRODUCT', 120,1560, C.inter);
+attr('bpr_id',    'product_id',        40,1490, true, C.inter);
+attr('bpr_name',  'name',              40,1550, false,C.inter);
+attr('bpr_desc',  'description',       40,1610, false,C.inter);
+attr('bpr_price', 'price',             40,1670, false,C.inter);
+attr('bpr_url',   'url',              155,1700, false,C.inter);
+
+edge('BIZ_PROD','bpr_id');
+edge('BIZ_PROD','bpr_name');
+edge('BIZ_PROD','bpr_desc');
+edge('BIZ_PROD','bpr_price');
+edge('BIZ_PROD','bpr_url');
+
+rel('LISTS',      'lists',       320,1420, C.inter);
+edge('BIZ_PROFILE','LISTS','1');
+edge('LISTS','BIZ_PROD','N');
+
+// ── ⑨  LIKE ───────────────────────────────────────────────────────────
+ent('LIKE',       'LIKE',       1500, 200, C.inter);
+attr('li_id',     'like_id',    1420, 130, true, C.inter);
+attr('li_time',   'created_at', 1580, 130, false,C.inter);
+
+edge('LIKE','li_id');
+edge('LIKE','li_time');
+
+rel('LIKES',      'likes',      1200, 340, C.inter);
+edge('USER','LIKES','1');
+edge('POST','LIKES','1');
+edge('LIKES','LIKE','N');
+
+// ── ⑩  COMMENT ────────────────────────────────────────────────────────
+ent('COMMENT',    'COMMENT',    1500, 520, C.inter);
+attr('co_id',     'comment_id', 1400, 440, true, C.inter);
+attr('co_cont',   'content',    1590, 440, false,C.inter);
+attr('co_time',   'created_at', 1640, 520, false,C.inter);
+attr('co_parent', 'parent_id',  1640, 600, false,C.inter);
+
+edge('COMMENT','co_id');
+edge('COMMENT','co_cont');
+edge('COMMENT','co_time');
+edge('COMMENT','co_parent');
+
+rel('COMMENTS',   'comments',   1200, 520, C.inter);
+edge('USER','COMMENTS','1');
+edge('POST','COMMENTS','1');
+edge('COMMENTS','COMMENT','N');
+
+// ── ⑪  SHARE ─────────────────────────────────────────────────────────
+ent('SHARE',      'SHARE',      1500, 820, C.inter);
+attr('sh_id',     'share_id',   1420, 750, true, C.inter);
+attr('sh_time',   'created_at', 1590, 760, false,C.inter);
+
+edge('SHARE','sh_id');
+edge('SHARE','sh_time');
+
+rel('SHARES',     'shares',     1200, 720, C.inter);
+edge('USER','SHARES','1');
+edge('POST','SHARES','1');
+edge('SHARES','SHARE','N');
+
+// ── ⑫  SAVED POST ────────────────────────────────────────────────────
+ent('SAVED_POST', 'SAVED_POST', 1500,1060, C.social);
+attr('sv_id',     'id',         1420, 990, true, C.social);
+
+edge('SAVED_POST','sv_id');
+
+rel('SAVES',      'saves',      1200, 960, C.social);
+edge('USER','SAVES','1');
+edge('POST','SAVES','1');
+edge('SAVES','SAVED_POST','N');
+
+// ── ⑬  FOLLOW ────────────────────────────────────────────────────────
+ent('FOLLOW',     'FOLLOW',      880,1280, C.social);
+attr('fo_id',     'follow_id',   790,1200, true, C.social);
+attr('fo_time',   'created_at',  910,1200, false,C.social);
+
+edge('FOLLOW','fo_id');
+edge('FOLLOW','fo_time');
+
+rel('FOLLOWS',    'follows',     700, 870, C.social);
+edge('USER','FOLLOWS','1');
+edge('FOLLOWS','FOLLOW','N');
+// follower and following both ref USER — edge label note
+edge('FOLLOW','USER'); // follower_id back to user
+
+// ── ⑭  CONNECTION ────────────────────────────────────────────────────
+ent('CONNECTION', 'CONNECTION',  880,1560, C.social);
+attr('cn_id',     'connection_id',780,1480, true,C.social);
+attr('cn_status', 'status',      920,1480, false,C.social);
+attr('cn_time',   'created_at',  990,1540, false,C.social);
+
+edge('CONNECTION','cn_id');
+edge('CONNECTION','cn_status');
+edge('CONNECTION','cn_time');
+
+rel('CONNECTS',   'connects',    700,1200, C.social);
+edge('USER','CONNECTS','1');
+edge('CONNECTS','CONNECTION','N');
+
+// ── ⑮  BLOCK ─────────────────────────────────────────────────────────
+ent('BLOCK',      'BLOCK',       880,1820, C.social);
+attr('bl_id',     'block_id',    790,1750, true, C.social);
+attr('bl_time',   'created_at',  910,1760, false,C.social);
+
+edge('BLOCK','bl_id');
+edge('BLOCK','bl_time');
+
+rel('BLOCKS',     'blocks',      700,1520, C.social);
+edge('USER','BLOCKS','1');
+edge('BLOCKS','BLOCK','N');
+
+// ── ⑯  NOTIFICATION ──────────────────────────────────────────────────
+ent('NOTIFICATION','NOTIFICATION',520,1560, C.notif);
+attr('no_id',     'notification_id',380,1480,true, C.notif);
+attr('no_type',   'type',          520,1480, false,C.notif);
+attr('no_msg',    'message',       650,1490, false,C.notif);
+attr('no_read',   'is_read',       700,1560, false,C.notif);
+attr('no_time',   'created_at',    660,1640, false,C.notif);
+
+edge('NOTIFICATION','no_id');
+edge('NOTIFICATION','no_type');
+edge('NOTIFICATION','no_msg');
+edge('NOTIFICATION','no_read');
+edge('NOTIFICATION','no_time');
+
+rel('NOTIFIES',   'notifies',    520,1360, C.notif);
+edge('USER','NOTIFIES','1');
+edge('NOTIFIES','NOTIFICATION','N');
+
+// ── ⑰  POST ANALYTICS ────────────────────────────────────────────────
+ent('POST_ANALYTICS','POST_ANALYTICS',520,1900,C.analyt);
+attr('pa_id',     'post_id',     400,1840, true, C.analyt);
+attr('pa_likes',  'total_likes', 530,1840, false,C.analyt);
+attr('pa_shares', 'total_shares',660,1860, false,C.analyt);
+attr('pa_cmts',   'total_comments',700,1930,false,C.analyt);
+
+edge('POST_ANALYTICS','pa_id');
+edge('POST_ANALYTICS','pa_likes');
+edge('POST_ANALYTICS','pa_shares');
+edge('POST_ANALYTICS','pa_cmts');
+
+rel('TRACKS_POST','tracks',     700,1780, C.analyt);
+edge('POST','TRACKS_POST','1');
+edge('TRACKS_POST','POST_ANALYTICS','1');
+
+// ── ⑱  FOLLOWER ANALYTICS ────────────────────────────────────────────
+ent('FOLLOWER_ANALYTICS','FOLLOWER_ANALYTICS',880,2060,C.analyt);
+attr('fa_id',     'user_id',     770,1980, true, C.analyt);
+attr('fa_flrs',   'total_followers',910,1980,false,C.analyt);
+attr('fa_fling',  'total_following',1040,2010,false,C.analyt);
+
+edge('FOLLOWER_ANALYTICS','fa_id');
+edge('FOLLOWER_ANALYTICS','fa_flrs');
+edge('FOLLOWER_ANALYTICS','fa_fling');
+
+rel('TRACKS_USER','tracks',     700,1960, C.analyt);
+edge('USER','TRACKS_USER','1');
+edge('TRACKS_USER','FOLLOWER_ANALYTICS','1');
+
+// ══════════════════════════════════════════════════════════════════════
+//  BUILD LOOKUP MAP
+// ══════════════════════════════════════════════════════════════════════
+const nodeMap = {};
+nodes.forEach(n => nodeMap[n.id] = n);
+
+// ══════════════════════════════════════════════════════════════════════
+//  RENDER
+// ══════════════════════════════════════════════════════════════════════
+const connG  = document.getElementById('conn-layer');
+const shapeG = document.getElementById('shape-layer');
+const lblG   = document.getElementById('label-layer');
+
+// ── Draw connecting lines ─────────────────────────────────────────────
+edges.forEach(({from, to, card}) => {
+  const a = nodeMap[from], b = nodeMap[to];
+  if(!a || !b) return;
+  const ax = a.x, ay = a.y;
+  const bx = b.x, by = b.y;
+
+  const line = el('line',{
+    x1:ax, y1:ay, x2:bx, y2:by,
+    stroke:'#94a3b8', 'stroke-width':1.6
+  });
+  connG.appendChild(line);
+
+  // Cardinality label near the 'to' end
+  if(card){
+    const ox = ax+(bx-ax)*.82, oy = ay+(by-ay)*.82;
+    const bg = el('rect',{x:ox-8,y:oy-9,width:16,height:14,rx:3,
+      fill:'#ffffff',opacity:.95});
+    connG.appendChild(bg);
+    const t = el('text',{x:ox,y:oy+1,
+      'text-anchor':'middle','dominant-baseline':'middle',
+      'font-size':11,'font-weight':700,
+      'font-family':"'Fira Code',monospace",
+      fill:card==='N'?'#fb923c':card==='1'?'#34d399':'#a78bfa'});
+    t.textContent=card;
+    connG.appendChild(t);
+  }
+});
+
+// ── Draw shapes ───────────────────────────────────────────────────────
+nodes.forEach(n => {
+  if(n.type==='entity'){
+    // Rectangle
+    const r = el('rect',{
+      x:n.x-n.w/2, y:n.y-n.h/2,
+      width:n.w, height:n.h,
+      rx:4, fill:'#eff6ff',
+      stroke:n.color,'stroke-width':2.5
+    });
+    shapeG.appendChild(r);
+    const t = el('text',{
+      x:n.x, y:n.y,
+      'text-anchor':'middle','dominant-baseline':'middle',
+      'font-size':13,'font-weight':700,
+      'font-family':"'DM Sans',sans-serif",
+      fill:C.entTxt
+    });
+    t.textContent=n.label;
+    lblG.appendChild(t);
+
+  } else if(n.type==='attr'){
+    // Oval — double stroke for PK
+    if(n.pk){
+      // outer oval
+      shapeG.appendChild(el('ellipse',{
+        cx:n.x,cy:n.y,rx:n.w/2+4,ry:n.h/2+4,
+        fill:'none',stroke:n.color,'stroke-width':1.5
+      }));
+    }
+    shapeG.appendChild(el('ellipse',{
+      cx:n.x,cy:n.y,rx:n.w/2,ry:n.h/2,
+      fill:'#faf5ff',stroke:n.color,'stroke-width':1.8
+    }));
+    const t = el('text',{
+      x:n.x, y:n.y,
+      'text-anchor':'middle','dominant-baseline':'middle',
+      'font-size':9,'font-family':"'Fira Code',monospace",
+      fill:n.pk?n.color:C.attrTxt,
+      'font-weight':n.pk?600:400
+    });
+    // Underline PK label
+    if(n.pk){
+      t.setAttribute('text-decoration','underline');
+    }
+    t.textContent=n.label;
+    lblG.appendChild(t);
+
+  } else if(n.type==='rel'){
+    // Diamond
+    const hw=n.w/2, hh=n.h/2;
+    const pts=`${n.x},${n.y-hh} ${n.x+hw},${n.y} ${n.x},${n.y+hh} ${n.x-hw},${n.y}`;
+    shapeG.appendChild(el('polygon',{
+      points:pts,
+      fill:'#f0fdf4',stroke:n.color,'stroke-width':2.2
+    }));
+    const t = el('text',{
+      x:n.x, y:n.y,
+      'text-anchor':'middle','dominant-baseline':'middle',
+      'font-size':11,'font-weight':700,
+      'font-family':"'DM Sans',sans-serif",
+      fill:n.color
+    });
+    t.textContent=n.label;
+    lblG.appendChild(t);
+  }
+});
+
+// ── Section banner labels ─────────────────────────────────────────────
+const banners = [
+  {label:'① USER',                  x:520,  y:240},
+  {label:'② PROFILES',              x:190,  y: 60},
+  {label:'③ CONTENT',               x:900,  y:240},
+  {label:'④ POST INTERACTIONS',     x:1380, y: 60},
+  {label:'⑤ SOCIAL GRAPH',          x:820,  y:1140},
+  {label:'⑥ NOTIFICATIONS',         x:540,  y:1340},
+  {label:'⑦ ANALYTICS',             x:660,  y:1760},
+];
+banners.forEach(b=>{
+  const t=el('text',{x:b.x,y:b.y,
+    'font-family':"'DM Sans',sans-serif",'font-size':13,
+    'font-weight':900,fill:'#94a3b8','letter-spacing':'.08em',
+    'text-anchor':'middle'});
+  t.textContent=b.label;
+  connG.appendChild(t);
+});
+
+// ══════════════════════════════════════════════════════════════════════
+//  PAN & ZOOM
+// ══════════════════════════════════════════════════════════════════════
+let vx=60, vy=40, vs=.45;
+const vp=document.getElementById('vp');
+const wrap=document.getElementById('wrap');
+
+function applyT(){
+  vp.setAttribute('transform',`translate(${vx},${vy}) scale(${vs})`);
+  document.getElementById('zlbl').textContent=Math.round(vs*100)+'%';
+}
+applyT();
+
+function zoomAt(f){
+  const svg=document.getElementById('svg');
+  const cx=svg.clientWidth/2, cy=svg.clientHeight/2;
+  const wx=(cx-vx)/vs, wy=(cy-vy)/vs;
+  vs=Math.min(5,Math.max(.08,vs*f));
+  vx=cx-wx*vs; vy=cy-wy*vs;
+  applyT();
+}
+function resetView(){vx=60;vy=40;vs=.45;applyT();}
+
+let drag=false,dx=0,dy=0;
+wrap.addEventListener('mousedown',e=>{drag=true;dx=e.clientX;dy=e.clientY;wrap.classList.add('g')});
+window.addEventListener('mousemove',e=>{
+  if(!drag)return;
+  vx+=e.clientX-dx; vy+=e.clientY-dy;
+  dx=e.clientX; dy=e.clientY;
+  applyT();
+});
+window.addEventListener('mouseup',()=>{drag=false;wrap.classList.remove('g')});
+wrap.addEventListener('wheel',e=>{
+  e.preventDefault();
+  const f=e.deltaY<0?1.12:.89;
+  const mx=e.clientX, my=e.clientY-50;
+  const wx=(mx-vx)/vs, wy=(my-vy)/vs;
+  vs=Math.min(5,Math.max(.08,vs*f));
+  vx=mx-wx*vs; vy=my-wy*vs;
+  applyT();
+},{passive:false});
+</script>
+</body>
+</html>
